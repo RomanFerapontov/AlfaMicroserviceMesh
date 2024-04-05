@@ -13,11 +13,11 @@ public static class RabbitMQService {
     private static readonly Context _context = NodesRegistry.selfContext;
 
     public static void Connect() {
+        try {
         ConnectionFactory factory = new() { HostName = ServiceBroker.RabbitMQHost, Port = ServiceBroker.RabbitMQPort };
 
         string instanceId = _context.InstanceID;
 
-        try {
             _connection = factory.CreateConnection();
             _connection.ConnectionShutdown += RabbitMQ_ConnectionShutdown;
 

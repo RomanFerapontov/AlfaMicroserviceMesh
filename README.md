@@ -2,7 +2,7 @@
 
 <a name="readme-top"></a>
 
-  <summary>Content</summary>
+  <summary></summary>
     <li>
       <a href="#about">About</a>
     </li>
