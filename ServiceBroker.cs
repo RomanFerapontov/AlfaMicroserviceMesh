@@ -33,6 +33,7 @@ public static class ServiceBroker {
             loggerConfig.ReadFrom.Configuration(context.Configuration));
 
         builder.Services.AddScoped<ITokenService, TokenService>();
+        builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<MessageProcessor>();
         builder.Services.AddSingleton<HealthChecker>();
         builder.Services.AddHostedService<Subscriber>();

@@ -24,7 +24,8 @@ public class HandlersRegistry {
                     var newAction = new NewAction {
                         Route = action.Route,
                         Params = action.Params,
-                        Access = action.Access
+                        Access = action.Access,
+                        Caching = action.Caching,
                     };
 
                     instancesMetadata.Actions[field.Name] = newAction.ToRegistryDTO();

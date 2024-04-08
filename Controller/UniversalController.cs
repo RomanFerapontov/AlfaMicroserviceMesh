@@ -7,16 +7,18 @@ using AlfaMicroserviceMesh.Services;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using Serilog;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace AlfaMicroserviceMesh.Utils;
 
 [ApiController]
 public class UniversalController(
     IHttpContextAccessor httpContextAccessor,
-    ITokenService tokenService) : ControllerBase {
+    ITokenService tokenService, IMemoryCache cache) : ControllerBase {
 
     private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
     private readonly ITokenService _tokenService = tokenService;
+    private readonly IMemoryCache _cache = cache;
 
     [Route("{*any}")]
     [HttpGet]
@@ -28,7 +30,9 @@ public class UniversalController(
             HttpContext httpContext = _httpContextAccessor.HttpContext!;
 
             var headers = httpContext.Request.Headers;
+            string method = httpContext.Request.Method;
             string path = httpContext.Request.Path.ToString();
+            string cacheKey = $"{path}?{httpContext.Request.QueryString}";
 
             if (!Regex.IsMatch(path, ValidationPatterns.Path))
                 throw new MicroserviceException(["Invalid URL"], 400, "INVALID_URL");
@@ -38,11 +42,11 @@ public class UniversalController(
             string targetAction = splittedPath[2];
 
             var requestParams = await GetParams(httpContext);
+            var targetInstance = NodesRegistry.GetNodeInstanceUid(targetNode);
+            var actionData = NodesRegistry.GetActionData(targetNode, targetInstance, targetAction);
 
-            string targetInstance = NodesRegistry.GetNodeInstanceUid(targetNode);
-
-            List<string>? roles = NodesRegistry.GetActionData(targetNode, targetInstance, targetAction).Access;
-
+            List<string>? roles = actionData.Access;
+            
             if (roles![0] != "ALL") {
                 if (!headers.ContainsKey("Authorization"))
                     throw new MicroserviceException(["Authorization token have not provided"], 401, "AUTHORIZATION_ERROR");
@@ -59,8 +63,19 @@ public class UniversalController(
                     Role = accessData["role"],
                 };
             }
+
+            if (_cache.TryGetValue(cacheKey, out object? cachedResult)) {
+                return StatusCode(200, new { Status = 200, Data = cachedResult });
+            }
+
+            var result = await NodesRegistry.Call(targetNode, targetAction, requestParams, targetInstance) ??
+                throw new MicroserviceException(["Request Timeout"]);
             
-            var result = await NodesRegistry.Call(targetNode, targetAction, requestParams, targetInstance);
+            if (actionData.Caching == true) {
+                _cache.Set(cacheKey, result, new MemoryCacheEntryOptions {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+                });
+            };
 
             if (targetAction == "SignUp" || targetAction == "SignIn") {
                 var claims = await result!.ConvertToModel<ClaimData>();
@@ -70,9 +85,6 @@ public class UniversalController(
                     jwt = _tokenService.CreateToken(claims!)
                 };
             }
-
-            if (result == null)
-                throw new MicroserviceException(["Request Timeout"]);
 
             return StatusCode(200, new { Status = 200, Data = result });
         }
@@ -96,7 +108,7 @@ public class UniversalController(
 
         string body = request.ContentLength.HasValue && request.ContentLength > 0 ?
             await new StreamReader(request.Body).ReadToEndAsync() : "{}";
-        
+
         var bodyParams = await body.DeserializeAsync<Dictionary<string, object>>();
 
         foreach (var queryParam in request.Query) {

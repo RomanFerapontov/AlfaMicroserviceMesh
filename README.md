@@ -37,6 +37,19 @@
 ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/Rabbitmq-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
 
+## What's included
+* request-reply concept
+* built-in service registry & dynamic service discovery
+* load balanced requests: Round-robin
+* built-in caching solution: MemoryCache
+* pluggable loggers: Console, Serilog
+* transport: RabbitMQ
+* serializer: JSON
+* customer parameter validator
+* master-less architecture, all nodes are equal
+* custom API gateway with universal controller
+
+
 ## Environment Requirements
 
 | Requirement     | Description              | Required |

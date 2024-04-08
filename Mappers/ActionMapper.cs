@@ -9,6 +9,7 @@ public static class ActionMapper {
             Route = newAction.Route,
             Params = newAction.Params,
             Access = newAction.Access,
+            Caching = newAction.Caching,
         };
     }
 }

@@ -102,14 +102,15 @@ public static class NodesRegistry {
         return _nodes[node].Instances[instanceId].Actions[action];
     }
 
-    public static async Task<object?> Call(string node, string action, object parameters, string instanceId = null!) {
+    public static async Task<object?> Call(string node, string action, object parameters = null!, string instanceId = null!) {
         instanceId ??= GetNodeInstanceUid(node);
 
         var actionData = GetActionData(node, instanceId, action);
 
-        var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
-
-        var validRequestParams = await CustomValidator.ValidateParams(parameters, paramsSchema!);
+        if (parameters != null) {
+            var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
+            parameters = await CustomValidator.ValidateParams(parameters, paramsSchema!);
+        }
 
         string requestID = Guid.NewGuid().ToString();
 
@@ -120,7 +121,7 @@ public static class NodesRegistry {
             Event = "request",
             RequestID = requestID,
             Request = new Request {
-                Parameters = validRequestParams,
+                Parameters = parameters ?? new {},
             },
         };
 
@@ -135,7 +136,6 @@ public static class NodesRegistry {
                 Info = result.Error
             };
         }
-
         return result?.Data;
     }
 }
