@@ -1,5 +1,4 @@
 using System.Reflection;
-using AlfaMicroserviceMesh.Mappers;
 using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Models.Action;
 using AlfaMicroserviceMesh.Models.Node;
@@ -8,6 +7,7 @@ namespace AlfaMicroserviceMesh.Utils;
 
 public class HandlersRegistry {
     public static readonly Dictionary<string, Func<Context, Task<object>>> Call = [];
+    public static readonly Dictionary<string, Func<Context, Task>> Emit = [];
     public static readonly InstanceMetadata instancesMetadata = new();
 
     public static void AddHandlers(List<object> handlersList) {
@@ -21,18 +21,27 @@ public class HandlersRegistry {
                 if (field.FieldType == typeof(NewAction)) {
                     var action = (NewAction)field.GetValue(handlers)!;
 
-                    var newAction = new NewAction {
-                        Route = action.Route,
-                        Params = action.Params,
-                        Access = action.Access,
-                        Caching = action.Caching,
-                    };
+                    Dictionary<string, object> args = [];
 
-                    instancesMetadata.Actions[field.Name] = newAction.ToRegistryDTO();
+                    if (action.Route != null) args.Add("route", action.Route);
+                    if (action.Params != null) args.Add("params", action.Params);
+                    if (action.Access != null) args.Add("access", action.Access);
+                    if (action?.Caching != null) args.Add("caching", action.Caching);
 
-                    var handler = action.Handler;
+                    instancesMetadata.Actions[field.Name] = args;
+
+                    var handler = action?.Handler;
 
                     if (handler != null) Call[field.Name] = handler;
+                }
+
+                if (field.FieldType == typeof(NewEvent)) {
+                    instancesMetadata.Events.Add(field.Name);
+
+                    var newEvent = (NewEvent)field.GetValue(handlers)!;
+                    var listener = newEvent?.Handler;
+
+                    if (listener != null) Emit[field.Name] = listener;
                 }
             }
         };

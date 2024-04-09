@@ -43,11 +43,12 @@ public class UniversalController(
 
             var requestParams = await GetParams(httpContext);
             var targetInstance = NodesRegistry.GetNodeInstanceUid(targetNode);
-            var actionData = NodesRegistry.GetActionData(targetNode, targetInstance, targetAction);
+            var actionData = await NodesRegistry.GetActionData(targetNode, targetInstance, targetAction);
 
             List<string>? roles = actionData.Access;
+            Console.WriteLine(roles);
             
-            if (roles![0] != "ALL") {
+            if (roles != null) {
                 if (!headers.ContainsKey("Authorization"))
                     throw new MicroserviceException(["Authorization token have not provided"], 401, "AUTHORIZATION_ERROR");
 

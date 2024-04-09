@@ -2,6 +2,7 @@ using AlfaMicroserviceMesh.Communication;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Models;
+using Serilog;
 
 namespace AlfaMicroserviceMesh.Utils;
 
@@ -14,8 +15,10 @@ public class MessageProcessor {
         if (ctx?.Event == "discover") UpdateNodeRegistry(ctx);
         if (ctx?.Event == "dispose") UpdateNodeRegistry(ctx, false);
 
-        if (ctx?.Event == "request") await HandleRequestEvent(ctx);
+        if (ctx?.Event == "request") await HandleRequest(ctx);
         if (ctx?.Event == "response") SaveNewResponse(ctx);
+
+        if (ctx?.Event == "event") await HandleEvent(ctx); 
 
         if (ctx?.Event == "error") SaveNewResponse(ctx);
     }
@@ -25,17 +28,17 @@ public class MessageProcessor {
         else NodesRegistry.DeleteNode(ctx);
     }
 
-    private async Task HandleRequestEvent(Context ctx) {
+    private async Task HandleRequest(Context ctx) {
         string caller = ctx.InstanceID;
         string action = ctx.Action;
 
         _context.RequestID = ctx.RequestID;
 
         try {
-            var actionResult = await HandlersRegistry.Call[action](ctx);
+            var handlerResult = await HandlersRegistry.Call[action](ctx);
 
             _context.Event = "response";
-            _context.Response.Data = actionResult;
+            _context.Response.Data = handlerResult;
             _context.Response.Error = null;
 
             var message = await _context.SerializeAsync();
@@ -51,6 +54,15 @@ public class MessageProcessor {
             var message = await _context.SerializeAsync();
 
             RabbitMQService.PublishMessage(message, caller);
+        }
+    }
+
+    private static async Task HandleEvent(Context ctx) {
+        try {
+            await HandlersRegistry.Emit[ctx.Action](ctx);
+        }
+        catch (Exception exception) {
+            Log.Error(exception.Message);
         }
     }
 

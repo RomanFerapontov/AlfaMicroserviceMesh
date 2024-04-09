@@ -1,5 +1,4 @@
 using AlfaMicroserviceMesh.Communication;
-using AlfaMicroserviceMesh.Dtos;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Helpers;
@@ -52,7 +51,8 @@ public static class NodesRegistry {
 
     private static void RegisterNodeInstance(Context ctx) {
         _nodes[ctx.NodeName].Instances[ctx.InstanceID] = new InstanceMetadata {
-            Actions = ctx.Metadata.Actions
+            Actions = ctx.Metadata.Actions,
+            Events = ctx.Metadata.Events
         };
     }
 
@@ -95,19 +95,21 @@ public static class NodesRegistry {
     public static bool IsActionExists(string node, string instanceId, string action) =>
         _nodes[node].Instances[instanceId].Actions.ContainsKey(action);
 
-    public static ActionDTO GetActionData(string node, string instanceId, string action) {
+    public static async Task<NewAction> GetActionData(string node, string instanceId, string action) {
         if (!IsActionExists(node, instanceId, action))
             throw new MicroserviceException([$"Invalid action name: '{action}'"]);
 
-        return _nodes[node].Instances[instanceId].Actions[action];
+        var actionData = await _nodes[node].Instances[instanceId].Actions[action].SerializeAsync();
+
+        return await actionData.DeserializeAsync<NewAction>();
     }
 
     public static async Task<object?> Call(string node, string action, object parameters = null!, string instanceId = null!) {
         instanceId ??= GetNodeInstanceUid(node);
 
-        var actionData = GetActionData(node, instanceId, action);
+        var actionData = await GetActionData(node, instanceId, action);
 
-        if (parameters != null) {
+        if (parameters != null && actionData.Params != null) {
             var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
             parameters = await CustomValidator.ValidateParams(parameters, paramsSchema!);
         }
@@ -121,7 +123,7 @@ public static class NodesRegistry {
             Event = "request",
             RequestID = requestID,
             Request = new Request {
-                Parameters = parameters ?? new {},
+                Parameters = parameters ?? new { },
             },
         };
 
@@ -137,5 +139,27 @@ public static class NodesRegistry {
             };
         }
         return result?.Data;
+    }
+
+    public static async Task Broadcast(string action, object? parameters = null!) {
+        foreach (var node in _nodes) {
+            Context context = new() {
+                NodeName = selfContext.NodeName,
+                InstanceID = selfContext.InstanceID,
+                Action = action,
+                Event = "event",
+                RequestID = Guid.NewGuid().ToString(),
+                Request = new Request {
+                    Parameters = parameters ?? new { },
+                },
+            };
+
+            var instanceId = GetNodeInstanceUid(node.Key);
+
+            if (_nodes[node.Key].Instances[instanceId].Events.Contains(action)) {
+                var message = await context.SerializeAsync();
+                RabbitMQService.PublishMessage(message, instanceId);
+            }
+        }
     }
 }
