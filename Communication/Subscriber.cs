@@ -1,17 +1,16 @@
 using System.Text;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using AlfaMicroserviceMesh.Utils;
 using AlfaMicroserviceMesh.Models;
 using Microsoft.Extensions.Hosting;
+using AlfaMicroserviceMesh.Services;
 using Serilog;
-using AlfaMicroserviceMesh.Exceptions;
 
 namespace AlfaMicroserviceMesh.Communication;
 
 public class Subscriber(MessageProcessor eventProcessor) : BackgroundService {
     private readonly MessageProcessor _eventProcessor = eventProcessor;
-    private readonly Context _context = NodesRegistry.selfContext;
+    private readonly Context _context = Nodes.selfContext;
 
     protected override Task ExecuteAsync(CancellationToken token) {
         try {
@@ -26,7 +25,7 @@ public class Subscriber(MessageProcessor eventProcessor) : BackgroundService {
         Log.Information($"Subscribed to {RabbitMQService.ExchangeName}");
 
         } catch (Exception) {
-            Log.Error($"Connection to RabbitMQ on '{ServiceBroker.RabbitMQHost}:{ServiceBroker.RabbitMQPort}' cannot be established.");
+            Log.Error($"Connection to RabbitMQ on '{ServiceBroker.Service.Transport.Host}:{ServiceBroker.Service.Transport.Port}' cannot be established.");
             Environment.Exit(1);
         }
 

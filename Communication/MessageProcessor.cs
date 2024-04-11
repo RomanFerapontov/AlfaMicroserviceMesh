@@ -1,13 +1,15 @@
-using AlfaMicroserviceMesh.Communication;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
+using AlfaMicroserviceMesh.Helpers;
 using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Models.ReqRes;
+using AlfaMicroserviceMesh.Services;
 using Serilog;
 
-namespace AlfaMicroserviceMesh.Utils;
+namespace AlfaMicroserviceMesh.Communication;
 
 public class MessageProcessor {
-    private readonly Context _context = NodesRegistry.selfContext;
+    private readonly Context _context = Nodes.selfContext;
 
     public async Task ProcessMessage(string message) {
         var ctx = await message.DeserializeAsync<Context>();
@@ -18,14 +20,14 @@ public class MessageProcessor {
         if (ctx?.Event == "request") await HandleRequest(ctx);
         if (ctx?.Event == "response") SaveNewResponse(ctx);
 
-        if (ctx?.Event == "event") await HandleEvent(ctx); 
+        if (ctx?.Event == "event") await HandleEvent(ctx);
 
         if (ctx?.Event == "error") SaveNewResponse(ctx);
     }
 
     private void UpdateNodeRegistry(Context ctx, bool addNode = true) {
-        if (addNode) NodesRegistry.AddNode(ctx);
-        else NodesRegistry.DeleteNode(ctx);
+        if (addNode) Nodes.AddNode(ctx);
+        else Nodes.DeleteNode(ctx);
     }
 
     private async Task HandleRequest(Context ctx) {
@@ -35,11 +37,15 @@ public class MessageProcessor {
         _context.RequestID = ctx.RequestID;
 
         try {
-            var handlerResult = await HandlersRegistry.Call[action](ctx);
+
+            int handlerTimeout = Handlers.Timeouts.TryGetValue(action, out int timeout) ? timeout :
+                ServiceBroker.Service.RequestTimeout;
+
+            Response handlerResult = await Timers
+                .ExecuteWithTimeout(Handlers.Call[action], ctx ,handlerTimeout);
 
             _context.Event = "response";
-            _context.Response.Data = handlerResult;
-            _context.Response.Error = null;
+            _context.Response = handlerResult;
 
             var message = await _context.SerializeAsync();
 
@@ -59,7 +65,7 @@ public class MessageProcessor {
 
     private static async Task HandleEvent(Context ctx) {
         try {
-            await HandlersRegistry.Emit[ctx.Action](ctx);
+            await Handlers.Emit[ctx.Action](ctx);
         }
         catch (Exception exception) {
             Log.Error(exception.Message);
@@ -67,6 +73,6 @@ public class MessageProcessor {
     }
 
     private void SaveNewResponse(Context ctx) {
-        ResponsesRegistry.SaveResponse(ctx.RequestID, ctx.Response.Data, ctx.Response.Error);
+        Responses.SaveResponse(ctx.RequestID, ctx.Response);
     }
 }

@@ -7,6 +7,9 @@
       <a href="#about">About</a>
     </li>
     <li>
+      <a href="#what-included">What's included</a>
+    </li>
+    <li>
       <a href="#environment-requirements">Environment Requirements</a>
     </li>
     <li>
@@ -38,17 +41,19 @@
 ![RabbitMQ](https://img.shields.io/badge/Rabbitmq-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
 
 ## What's included
-* request-reply concept
-* built-in service registry & dynamic service discovery
-* load balanced requests: Round-robin
-* built-in caching solution: MemoryCache
-* pluggable loggers: Console, Serilog
-* transport: RabbitMQ
-* serializer: JSON
-* customer parameter validator
-* master-less architecture, all nodes are equal
-* custom API gateway with universal controller
 
+- request-reply concept
+- built-in service registry & dynamic service discovery
+- load balanced requests (Round-robin)
+- Fault tolerance features (RetryPolicy, Timeouts)
+- built-in caching solution (MemoryCache)
+- pluggable loggers (Console, Serilog)
+- transport (RabbitMQ)
+- serializer (JSON)
+- customer parameter validator
+- master-less architecture, all nodes are equal
+- built-in metrics feature (Prometheus)
+- custom API gateway with universal controller
 
 ## Environment Requirements
 
@@ -82,7 +87,10 @@ Enter variables to `appsettings.js`
   "ServiceName": "Your Gateway Name",
   "Version": "Gateway Version",
   "Connections": {
-    "RabbitMQ": "http://host_name:port"
+    "RabbitMQ": {
+      "Host": "host_name",
+      "Port": "port"
+    }
   },
   "JWT": {
     "Issuer": "http://your_server:port",
@@ -113,7 +121,7 @@ In `Program.cs` create new service with options using _ServiceBroker_
 
 ```csharp
 using AlfaMicroserviceMesh;
-using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Models.Service;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -124,13 +132,19 @@ builder.Services.AddControllers();
 var options = new ServiceOptions {
     Name = config["ServiceName"]!,
     Version = config["Version"]!,
-    Transport = config["Connections:RabbitMQ"]!
+    Transport = new MessageBroker {
+        Host = config["Connections:RabbitMQ:Host"],
+        Port = config["Connections:RabbitMQ:Port"],
+    },
+    Metrics = true,
+    Logging = true,
 };
 
 ServiceBroker.CreateService(builder, options);
 
 var app = builder.Build();
 
+app.MapPrometheusScrapingEndpoint();
 app.UseHttpsRedirection();
 app.MapControllers();
 app.Run();
@@ -157,7 +171,10 @@ Make sure you enter the variables in `appsettings.js`
   "ServiceName": "Users",
   "Version": "dev",
   "Connections": {
-    "RabbitMQ": "http://host_name:port",
+    "RabbitMQ": {
+      "Host": "host_name",
+      "Port": "port"
+    },
     "MySql": "Server=<DB_Host>;Port=<DB_Port>;Database=<DB_Name>;Uid=root;Pwd=<DB_Password>;"
   },
   "Serilog": {
@@ -203,56 +220,37 @@ After succeed launch of API Gateway and other microservices use route:
 For instance:
 
 ```json
-  "Users": { /*microservice name*/
-    "instances": {
-      "61fd54e2-4522-49f8-bfcc-82b9356404cc": {
-        "actions": { 
-          "SignUp": { /*action name*/
-            "route": {
-              "Method": "POST",
-              "Path": "Users/SignUp",
-              "Description": "Creating new user profile"
+"Users": { /*microservice name*/
+  "instances": {
+    "61fd54e2-4522-49f8-bfcc-82b9356404cc": {
+      "actions": {
+        "GetById": { /*action name*/
+          "Route": {
+            "Method": "GET",
+            "Path": "Users/GetById",
+            "Description": "Get user by ID"
+          },
+          "Params": {
+            "Id": { /*parameter name*/
+              "Type": "Number",
+              "Required": true,
+              "Description": "User ID"
+            }
             },
-            "params": {
-              "UserName": { /*parameter name*/
-                "Type": "String",
-                "Required": true,
-                "Description": "John"
-              },
-              "Email": {
-                "Type": "Email",
-                "Required": true,
-                "Description": "john@mail.com"
-              },
-              "Password": {
-                "Type": "Password",
-                "Required": true,
-                "Description": "P@ssw0rd123456"
-              },
-              "Role": {
-                "Allowed": ["USER", "MANAGER", "ADMIN"]
-              }
-            },
-            "access": ["ALL"],
-          "GetById": {
-            "route": {
-              "Method": "GET",
-              "Path": "Users/GetById",
-              "Description": "Get user by ID"
-            },
-            "params": {
-              "Id": {
-                "Type": "Number",
-                "Required": true
-              }
-            },
-            "access": ["USER", "MANAGER", "ADMIN"]
-          }
+          "Access": [ "USER", "MANAGER", "ADMIN" ],
+          "RequestTimeout": 1000,
+          "RetryPolicy": {
+            "MaxAttempts": 3,
+            "Delay": 500
+          },
+          "Caching": true
         }
-      }
+      },
+      "events": ["EventName"]
     },
-    "lastRequest": "61fd54e2-4522-49f8-bfcc-82b9356404cc"
-  }
+    "3a3a9f0c-5d10-45f4-8224-be111e1ae943": { /* ... */ },
+  },
+  "lastRequest": "3a3a9f0c-5d10-45f4-8224-be111e1ae943"
 }
 ```
 
@@ -268,9 +266,9 @@ To **SignUp** a new user, request must be sent to:
 
 ```json
 {
-	"UserName": "Name",
-	"Email": "example@mail.com",
-	"Password": "P@ssw0rdP@ssw0rd"
+  "UserName": "Name",
+  "Email": "example@mail.com",
+  "Password": "P@ssw0rdP@ssw0rd"
 }
 ```
 
@@ -278,7 +276,7 @@ or
 
 `http://Users/GetById?Id=3`
 
-In that case request will be send to microservice **Users** to action **GetById** with parameter **Id=3**. 
+In that case request will be send to microservice **Users** to action **GetById** with parameter **Id=3**.
 <br></br>
 
 # Diagrams
@@ -289,7 +287,7 @@ The diagrams describe how microservices communicate with each other using a mess
 
 ![connecting-node-scheme](Img/connecting-node.png)
 
-## Health checking 
+## Health checking
 
 ![connecting-node-scheme](Img/heartbeat.png)
 

@@ -1,13 +1,13 @@
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Models;
-using AlfaMicroserviceMesh.Utils;
+using AlfaMicroserviceMesh.Services;
 using Microsoft.Extensions.Hosting;
 
 namespace AlfaMicroserviceMesh.Communication;
 
 public class HealthChecker : BackgroundService {
     private readonly PeriodicTimer _timer = new(TimeSpan.FromMilliseconds(5000));
-    private readonly Context _context = NodesRegistry.selfContext;
+    private readonly Context _context = Nodes.selfContext;
 
     protected override async Task ExecuteAsync(CancellationToken token) {
         while (await _timer.WaitForNextTickAsync(token) && !token.IsCancellationRequested) {

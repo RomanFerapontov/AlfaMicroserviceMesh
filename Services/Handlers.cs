@@ -2,15 +2,17 @@ using System.Reflection;
 using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Models.Action;
 using AlfaMicroserviceMesh.Models.Node;
+using AlfaMicroserviceMesh.Models.ReqRes;
 
-namespace AlfaMicroserviceMesh.Utils;
+namespace AlfaMicroserviceMesh.Services;
 
-public class HandlersRegistry {
-    public static readonly Dictionary<string, Func<Context, Task<object>>> Call = [];
+public class Handlers {
+    public static readonly Dictionary<string, Func<Context, Task<Response>>> Call = [];
+    public static readonly Dictionary<string, int> Timeouts = [];
     public static readonly Dictionary<string, Func<Context, Task>> Emit = [];
-    public static readonly InstanceMetadata instancesMetadata = new();
+    private static readonly InstanceMetadata instancesMetadata = new();
 
-    public static void AddHandlers(List<object> handlersList) {
+    public static void Add(List<object> handlersList) {
         foreach (var handlers in handlersList) {
 
             var type = handlers.GetType();
@@ -23,10 +25,16 @@ public class HandlersRegistry {
 
                     Dictionary<string, object> args = [];
 
-                    if (action.Route != null) args.Add("route", action.Route);
-                    if (action.Params != null) args.Add("params", action.Params);
-                    if (action.Access != null) args.Add("access", action.Access);
-                    if (action?.Caching != null) args.Add("caching", action.Caching);
+                    if (action.Route != null) args.Add("Route", action.Route);
+                    if (action.Params != null) args.Add("Params", action.Params);
+                    if (action.Access != null) args.Add("Access", action.Access);
+                    if (action.RequestTimeout != null) {
+                        Timeouts[field.Name] = (int)action.RequestTimeout;
+                        args.Add("RequestTimeout", action.RequestTimeout);
+                    }
+                    if (action.RetryPolicy != null) args.Add("RetryPolicy", action.RetryPolicy);
+                    if (action.Caching != null) args.Add("Caching", action.Caching);
+
 
                     instancesMetadata.Actions[field.Name] = args;
 
@@ -45,6 +53,6 @@ public class HandlersRegistry {
                 }
             }
         };
-        NodesRegistry.selfContext.Metadata = instancesMetadata;
+        Nodes.selfContext.Metadata = instancesMetadata;
     }
 }

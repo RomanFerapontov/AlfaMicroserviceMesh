@@ -42,11 +42,10 @@ public class UniversalController(
             string targetAction = splittedPath[2];
 
             var requestParams = await GetParams(httpContext);
-            var targetInstance = NodesRegistry.GetNodeInstanceUid(targetNode);
-            var actionData = await NodesRegistry.GetActionData(targetNode, targetInstance, targetAction);
+            var targetInstance = Nodes.GetNodeInstanceUid(targetNode);
+            var actionData = await Nodes.GetActionData(targetNode, targetInstance, targetAction);
 
             List<string>? roles = actionData.Access;
-            Console.WriteLine(roles);
             
             if (roles != null) {
                 if (!headers.ContainsKey("Authorization"))
@@ -65,29 +64,27 @@ public class UniversalController(
                 };
             }
 
-            if (_cache.TryGetValue(cacheKey, out object? cachedResult)) {
-                return StatusCode(200, new { Status = 200, Data = cachedResult });
+            if (_cache.TryGetValue(cacheKey, out object? cachedResponse)) {
+                return StatusCode(200, cachedResponse);
             }
 
-            var result = await NodesRegistry.Call(targetNode, targetAction, requestParams, targetInstance) ??
-                throw new MicroserviceException(["Request Timeout"]);
-            
+            var response = await Nodes.Call(targetNode, targetAction, requestParams, targetInstance);
+
             if (actionData.Caching == true) {
-                _cache.Set(cacheKey, result, new MemoryCacheEntryOptions {
+                _cache.Set(cacheKey, response?.Data, new MemoryCacheEntryOptions {
                     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
                 });
             };
 
             if (targetAction == "SignUp" || targetAction == "SignIn") {
-                var claims = await result!.ConvertToModel<ClaimData>();
+                var claims = await response!.Data!.ConvertToModel<ClaimData>();
 
-                result = new {
-                    UserData = result,
-                    jwt = _tokenService.CreateToken(claims!)
-                };
+                return StatusCode(200, new {
+                    response?.Data,
+                    jwt = _tokenService.CreateToken(claims!) });
             }
 
-            return StatusCode(200, new { Status = 200, Data = result });
+            return StatusCode(200, response?.Data);
         }
         catch (Exception exception) {
             Log.Error(exception.Message);
@@ -100,9 +97,9 @@ public class UniversalController(
 
     [HttpGet]
     [Route("api")]
-    public ActionResult GetNodeRegistryInfo() => Ok(NodesRegistry._nodes);
+    public ActionResult GetNodeRegistryInfo() => Ok(Nodes._nodes);
 
-    private async Task<Dictionary<string, object>> GetParams(HttpContext httpContext) {
+    private static async Task<Dictionary<string, object>> GetParams(HttpContext httpContext) {
         var request = httpContext.Request;
 
         Dictionary<string, object> parameters = [];

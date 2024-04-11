@@ -1,7 +1,6 @@
 ﻿using AlfaMicroserviceMesh.Communication;
-using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Models.Service;
 using AlfaMicroserviceMesh.Services;
-using AlfaMicroserviceMesh.Utils;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
@@ -10,10 +9,7 @@ using Serilog;
 namespace AlfaMicroserviceMesh;
 
 public static class ServiceBroker {
-    public static string ServiceName { get; set; } = string.Empty;
-    public static string ServiceInstance { get; set; } = string.Empty;
-    public static string RabbitMQHost { get; set; } = string.Empty;
-    public static int RabbitMQPort { get; set; }
+    public static readonly ServiceOptions Service = new();
 
     public static void CreateService(this WebApplicationBuilder builder, ServiceOptions configuration) {
         builder.Services.AddScoped<ITokenService, TokenService>();
@@ -45,13 +41,11 @@ public static class ServiceBroker {
                 loggerConfig.ReadFrom.Configuration(context.Configuration));
         }
 
-        string transportUrl = configuration.Transport.Split("://")[^1];
-        string[] transport = transportUrl.Split(":");
-
-        ServiceName = configuration.Name;
-        ServiceInstance = Guid.NewGuid().ToString();
-        RabbitMQHost = transport[^2];
-        RabbitMQPort = int.Parse(transport[^1]);
+        Service.Name = configuration.Name;
+        Service.InstanceID = Guid.NewGuid().ToString();
+        Service.Transport = configuration.Transport;
+        Service.RetryPolicy = configuration.RetryPolicy;
+        Service.RequestTimeout = configuration.RequestTimeout;
 
         RabbitMQService.Connect();
     }

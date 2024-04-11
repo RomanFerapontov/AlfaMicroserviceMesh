@@ -9,15 +9,15 @@ using AlfaMicroserviceMesh.Models.ReqRes;
 using AlfaMicroserviceMesh.Validator;
 using Serilog;
 
-namespace AlfaMicroserviceMesh.Utils;
+namespace AlfaMicroserviceMesh.Services;
 
-public static class NodesRegistry {
+public static class Nodes {
     public readonly static Dictionary<string, Node> _nodes = [];
     private readonly static Dictionary<string, string> _timers = [];
 
     public static readonly Context selfContext = new() {
-        NodeName = ServiceBroker.ServiceName,
-        InstanceID = ServiceBroker.ServiceInstance,
+        NodeName = ServiceBroker.Service.Name,
+        InstanceID = ServiceBroker.Service.InstanceID
     };
 
     public static void AddNode(Context ctx) {
@@ -66,12 +66,12 @@ public static class NodesRegistry {
     }
 
     private static void SetInstanceLiveTimeInterval(Context ctx, int liveInterval) {
-        var timerID = IntervalTimer.SetTimeout(() => RemoveNodeInstance(ctx), liveInterval);
+        var timerID = Timers.SetTimeout(() => RemoveNodeInstance(ctx), liveInterval);
         _timers[ctx.InstanceID] = timerID;
     }
 
     private static void RemoveNodeInstanceTimer(string InstanceID) =>
-        IntervalTimer.ClearTimer(_timers[InstanceID]);
+        Timers.ClearTimer(_timers[InstanceID]);
 
     public static string GetNodeInstanceUid(string nodeName) {
         if (!_nodes.TryGetValue(nodeName, out Node? node))
@@ -104,41 +104,50 @@ public static class NodesRegistry {
         return await actionData.DeserializeAsync<NewAction>();
     }
 
-    public static async Task<object?> Call(string node, string action, object parameters = null!, string instanceId = null!) {
+    public static async Task<Response?> Call(string node, string action, object parameters = null!, string instanceId = null!) {
         instanceId ??= GetNodeInstanceUid(node);
-
+        
         var actionData = await GetActionData(node, instanceId, action);
+        var exception = new MicroserviceException();
+        var retries = actionData.RetryPolicy?.MaxAttempts ??
+            ServiceBroker.Service.RetryPolicy.MaxAttempts;
 
-        if (parameters != null && actionData.Params != null) {
-            var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
-            parameters = await CustomValidator.ValidateParams(parameters, paramsSchema!);
-        }
+        while (retries != 0) {
+            var requestTimeout = actionData?.RequestTimeout ?? ServiceBroker.Service.RequestTimeout;
+            var requestID = Guid.NewGuid().ToString();
 
-        string requestID = Guid.NewGuid().ToString();
+            if (parameters != null && actionData!.Params != null) {
+                var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
+                parameters = await CustomValidator.ValidateParams(parameters, paramsSchema!);
+            }
 
-        Context context = new() {
-            NodeName = selfContext.NodeName,
-            InstanceID = selfContext.InstanceID,
-            Action = action,
-            Event = "request",
-            RequestID = requestID,
-            Request = new Request {
-                Parameters = parameters ?? new { },
-            },
-        };
-
-        var message = await context.SerializeAsync();
-
-        RabbitMQService.PublishMessage(message, instanceId);
-
-        var result = await ResponsesRegistry.GetResponse(requestID, TimeSpan.FromSeconds(5));
-
-        if (result?.Error != null) {
-            throw new MicroserviceException {
-                Info = result.Error
+            Context context = new() {
+                NodeName = selfContext.NodeName,
+                InstanceID = selfContext.InstanceID,
+                Action = action,
+                Event = "request",
+                RequestID = requestID,
+                Request = new Request {
+                    Parameters = parameters ?? new { },
+                },
             };
+
+            var message = await context.SerializeAsync();
+
+            RabbitMQService.PublishMessage(message, instanceId);
+            
+            Response result = await Responses
+                .GetResponse(requestID, TimeSpan.FromMilliseconds(requestTimeout));
+
+            if (result?.Error != null) {
+                exception.Info.Errors = result.Error.Errors;
+                retries--;
+                await Task.Delay(actionData?.RetryPolicy?.Delay ?? 0);
+            }
+            else return result;
         }
-        return result?.Data;
+
+        throw exception;
     }
 
     public static async Task Broadcast(string action, object? parameters = null!) {

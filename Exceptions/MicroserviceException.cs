@@ -3,8 +3,8 @@ using AlfaMicroserviceMesh.Models;
 namespace AlfaMicroserviceMesh.Exceptions;
 
 public class MicroserviceException : Exception {
-    private readonly string ServiceName = ServiceBroker.ServiceName;
-    private readonly string ServiceInstance = ServiceBroker.ServiceInstance;
+    private readonly string ServiceName = ServiceBroker.Service.Name;
+    private readonly string ServiceInstance = ServiceBroker.Service.InstanceID;
 
     public ErrorData Info = new();
 
