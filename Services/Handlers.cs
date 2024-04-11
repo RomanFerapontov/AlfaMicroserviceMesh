@@ -8,15 +8,13 @@ namespace AlfaMicroserviceMesh.Services;
 
 public class Handlers {
     public static readonly Dictionary<string, Func<Context, Task<Response>>> Call = [];
-    public static readonly Dictionary<string, int> Timeouts = [];
     public static readonly Dictionary<string, Func<Context, Task>> Emit = [];
+    public static readonly Dictionary<string, int> Timeouts = [];
     private static readonly InstanceMetadata instancesMetadata = new();
 
     public static void Add(List<object> handlersList) {
         foreach (var handlers in handlersList) {
-
             var type = handlers.GetType();
-
             var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
 
             foreach (var field in fields) {
@@ -34,7 +32,6 @@ public class Handlers {
                     }
                     if (action.RetryPolicy != null) args.Add("RetryPolicy", action.RetryPolicy);
                     if (action.Caching != null) args.Add("Caching", action.Caching);
-
 
                     instancesMetadata.Actions[field.Name] = args;
 

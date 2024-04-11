@@ -30,7 +30,6 @@ public static class Timers {
         return timerID;
     }
 
-
     public static void ClearTimer(string timerID) {
         if (Tokens.TryGetValue(timerID, out CancellationTokenSource? cts)) {
             cts.Cancel();

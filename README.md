@@ -205,10 +205,10 @@ _Additional information about using template: [How to use microservice template]
 
 ## Running application
 
-Run each microservice by command:
+Run each microservice by command, input your host and port:
 
 ```sh
-dotnet run
+dotnet run --urls=http://<host>:<port>
 ```
 
 ## Usage

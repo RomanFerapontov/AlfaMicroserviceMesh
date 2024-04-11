@@ -142,7 +142,8 @@ public static class Nodes {
             if (result?.Error != null) {
                 exception.Info.Errors = result.Error.Errors;
                 retries--;
-                await Task.Delay(actionData?.RetryPolicy?.Delay ?? 0);
+                await Task.Delay(actionData?.RetryPolicy?.Delay ??
+                    ServiceBroker.Service.RetryPolicy.Delay);
             }
             else return result;
         }
