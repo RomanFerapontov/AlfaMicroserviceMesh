@@ -25,20 +25,18 @@
     <li>
       <a href="#usage">Usage</a>
     </li>
-    <li>
-      <a href="#diagrams">Diagrams</a>
-      <ul>
-        <li><a href="#connecting-new-node">Connecting new node</a></li>
-        <li><a href="#add-new-microservice">Health checking</a></li>
-        <li><a href="#request-response">Request - Response</a></li>
-      </ul>
 
 ## About
 
-**AlfaMicroserviceMesh** is a microservices framework for [.NET](https://dotnet.microsoft.com/en-us/). It helps you to build efficient, scalable services. Framework provides features for building your microservices.
-
 ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/Rabbitmq-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
+
+**AlfaMicroserviceMesh** is a microservices framework for [.NET](https://dotnet.microsoft.com/en-us/). It helps you to build efficient, scalable services. Framework provides features for building your microservices.
+
+The diagram below describes how microservices communicate with each other using a message broker.
+
+![connecting-node-scheme](Img/diagram.png)
+---
 
 ## What's included
 
@@ -98,14 +96,23 @@ Enter variables to `appsettings.js`
     "SigningKey": "Your Signing Key"
   },
   "Serilog": {
-    "Using": ["Serilog.Sinks.Console"],
+    "Using": [
+      "Serilog.Sinks.Console",
+      // "Serilog.Sinks.Seq" - if you want to use Seq
+    ],
     "MinimumLevel": {
       "Default": "Information",
       "Override": {
         "Microsoft": "Information"
       }
     },
-    "WriteTo": [{ "Name": "Console" }],
+    "WriteTo": [
+      { "Name": "Console" },
+      /* {
+       "Name": "Seq",
+       "Args": { "serverUrl": "http://seq_server:port"}
+      } */
+    ],
     "Enrich": ["FromLogContext", "WithMachineName", "WithThreadId"]
   }
 }
@@ -117,7 +124,13 @@ Install package from nuget:
 dotnet add package AlfaMicroserviceMesh
 ```
 
-In `Program.cs` create new service with options using _ServiceBroker_
+In case of using Seq for development you should install:
+
+```sh
+dotnet add package Serilog.Sinks.Seq
+```
+
+In `Program.cs` create new service with options using **ServiceBroker**
 
 ```csharp
 using AlfaMicroserviceMesh;
@@ -144,12 +157,23 @@ ServiceBroker.CreateService(builder, options);
 
 var app = builder.Build();
 
+// app.UseMiddleware<RequestLogContexMiddleware>(); - if you use Seq
 app.MapPrometheusScrapingEndpoint();
 app.UseHttpsRedirection();
 app.MapControllers();
 app.Run();
 ```
 
+Properties of **ServiceOptions**:
+
+| Property       | Description                     | Required | Default                    |                   
+| -----------    | ------------------------------- | -------- | -------------------------- |                   
+| Name           | Name of microservice            | ✔        | ""                         |
+| Version        | Version of microservice         | ✔        | ""                         |
+| Transport      | Address of RabbitMQ server      | ✔        | null                       |
+| Logging        | Use Serilog                     | -        | false                      |
+| Metrics        | Use Prometheus                  | -        | false                      |
+---
 ### Add new microservice
 
 Use ready-made template to establish new microservice. Clone the repo:
@@ -215,7 +239,7 @@ dotnet run --urls=http://<host>:<port>
 
 After succeed launch of API Gateway and other microservices use route:
 
-`http://<host>:<port>/api` to get information about microservices within your system.</p>
+`http://<host>:<port>/registry` and `http://<host>:<port>/registry/<serviceName>` to get information about microservices within your system.</p>
 
 For instance:
 
@@ -278,21 +302,5 @@ or
 
 In that case request will be send to microservice **Users** to action **GetById** with parameter **Id=3**.
 <br></br>
-
-# Diagrams
-
-The diagrams describe how microservices communicate with each other using a message broker.
-
-## Connecting new node
-
-![connecting-node-scheme](Img/connecting-node.png)
-
-## Health checking
-
-![connecting-node-scheme](Img/heartbeat.png)
-
-## Request - Response
-
-![connecting-node-scheme](Img/request-response.png)
 
 ---

@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
-using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Constants;
+using AlfaMicroserviceMesh.Models.Errors;
 using AlfaMicroserviceMesh.Models.ReqRes;
 
-namespace AlfaMicroserviceMesh.Services;
+namespace AlfaMicroserviceMesh.Registry;
 
 public static class Responses {
     public static readonly ConcurrentDictionary<string, TaskCompletionSource<Response>> _responses = new();
@@ -16,14 +17,20 @@ public static class Responses {
             .ContinueWith(task => {
                 _responses.TryRemove(requestID, out _);
                 return task.Result == timeoutTask ?
-                    new Response { Error = new ErrorData { Errors = ["Request Timeout"] } } : 
+                    new Response {
+                        Error = new ErrorData {
+                            Status = 504,
+                            Type = ErrorTypes.RequestTimeout.Type,
+                            Error = "Request Timeout"
+                        }
+                    } :
                     responseTcs.Task.Result;
             });
     }
 
     public static void SaveResponse(string requestID, Response? response) {
         if (_responses.TryGetValue(requestID, out var responseTcs)) {
-            if (response != null) responseTcs.SetResult(response);
+            if (response is not null) responseTcs.SetResult(response);
         }
     }
 }

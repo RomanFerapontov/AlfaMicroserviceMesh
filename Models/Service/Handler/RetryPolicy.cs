@@ -1,4 +1,4 @@
-namespace AlfaMicroserviceMesh.Models.Service;
+namespace AlfaMicroserviceMesh.Models.Service.Handler;
 
 public class RetryPolicy {
     public int MaxAttempts { get; set; } = 1;

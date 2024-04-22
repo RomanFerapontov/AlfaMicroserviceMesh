@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Serilog.Context;
 
-namespace GatewayService.Middlewares;
+namespace AlfaMicroserviceMesh.Middlewares;
 
 public class RequestLogContexMiddleware(RequestDelegate next) {
     private readonly RequestDelegate _next = next;

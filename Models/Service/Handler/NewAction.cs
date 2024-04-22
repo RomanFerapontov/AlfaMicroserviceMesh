@@ -1,7 +1,6 @@
 using AlfaMicroserviceMesh.Models.ReqRes;
-using AlfaMicroserviceMesh.Models.Service;
 
-namespace AlfaMicroserviceMesh.Models.Action;
+namespace AlfaMicroserviceMesh.Models.Service.Handler;
 
 public class NewAction {
     public object? Route { get; set; }

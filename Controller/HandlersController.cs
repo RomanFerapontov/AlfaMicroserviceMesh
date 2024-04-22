@@ -1,23 +1,25 @@
 using AlfaMicroserviceMesh.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using AlfaMicroserviceMesh.Validator;
 using System.Text.RegularExpressions;
-using AlfaMicroserviceMesh.Services;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using Serilog;
 using Microsoft.Extensions.Caching.Memory;
+using AlfaMicroserviceMesh.TokenService;
+using AlfaMicroserviceMesh.Registry;
+using AlfaMicroserviceMesh.Models.Errors;
+using AlfaMicroserviceMesh.Constants;
 
 namespace AlfaMicroserviceMesh.Utils;
 
 [ApiController]
-public class UniversalController(
+public class HandlersController(
     IHttpContextAccessor httpContextAccessor,
-    ITokenService tokenService, IMemoryCache cache) : ControllerBase {
+    IJwtTokenService tokenService, IMemoryCache cache) : ControllerBase {
 
     private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
-    private readonly ITokenService _tokenService = tokenService;
+    private readonly IJwtTokenService _tokenService = tokenService;
     private readonly IMemoryCache _cache = cache;
 
     [Route("{*any}")]
@@ -35,28 +37,28 @@ public class UniversalController(
             string cacheKey = $"{path}?{httpContext.Request.QueryString}";
 
             if (!Regex.IsMatch(path, ValidationPatterns.Path))
-                throw new MicroserviceException(["Invalid URL"], 400, "INVALID_URL");
+                throw new MicroserviceException("Invalid URL", ErrorTypes.ValidationError);
 
             string[] splittedPath = path.Split("/");
             string targetNode = splittedPath[1];
             string targetAction = splittedPath[2];
 
             var requestParams = await GetParams(httpContext);
-            var targetInstance = Nodes.GetNodeInstanceUid(targetNode);
-            var actionData = await Nodes.GetActionData(targetNode, targetInstance, targetAction);
+            var targetInstance = Services.GetNodeInstanceUid(targetNode);
+            var actionData = await Services.GetActionData(targetNode, targetInstance, targetAction);
 
             List<string>? roles = actionData.Access;
-            
-            if (roles != null) {
+
+            if (roles is not null) {
                 if (!headers.ContainsKey("Authorization"))
-                    throw new MicroserviceException(["Authorization token have not provided"], 401, "AUTHORIZATION_ERROR");
+                    throw new MicroserviceException("Authorization token have not provided", ErrorTypes.Unauthorized);
 
                 string token = headers.Authorization!.ToString().Split(" ")[1];
 
                 var accessData = await _tokenService.GetAccessData(token);
 
                 if (!roles.Contains(accessData["role"]))
-                    throw new MicroserviceException(["Permission denied"], 403, "AUTHORIZATION_ERROR");
+                    throw new MicroserviceException("Permission denied", ErrorTypes.Forbidden);
 
                 requestParams["Access"] = new ClaimData {
                     Uid = accessData["uid"],
@@ -68,20 +70,21 @@ public class UniversalController(
                 return StatusCode(200, cachedResponse);
             }
 
-            var response = await Nodes.Call(targetNode, targetAction, requestParams, targetInstance);
+            var response = await Services.Call(targetNode, targetAction, requestParams, targetInstance);
 
-            if (actionData.Caching == true) {
+            if (actionData.Caching is true) {
                 _cache.Set(cacheKey, response?.Data, new MemoryCacheEntryOptions {
                     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
                 });
             };
 
-            if (targetAction == "SignUp" || targetAction == "SignIn") {
+            if (targetAction is "SignIn" || targetAction is "Login") {
                 var claims = await response!.Data!.ConvertToModel<ClaimData>();
 
                 return StatusCode(200, new {
                     response?.Data,
-                    jwt = _tokenService.CreateToken(claims!) });
+                    jwt = _tokenService.CreateToken(claims!)
+                });
             }
 
             return StatusCode(200, response?.Data);
@@ -91,13 +94,9 @@ public class UniversalController(
 
             return exception is MicroserviceException MSException ?
                 StatusCode(MSException.Info.Status, MSException.Info) :
-                StatusCode(500, new ErrorData { Errors = [exception.Message] });
+                StatusCode(500, new ErrorData { Error = exception.Message });
         }
     }
-
-    [HttpGet]
-    [Route("api")]
-    public ActionResult GetNodeRegistryInfo() => Ok(Nodes._nodes);
 
     private static async Task<Dictionary<string, object>> GetParams(HttpContext httpContext) {
         var request = httpContext.Request;

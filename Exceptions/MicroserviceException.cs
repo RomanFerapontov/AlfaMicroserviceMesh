@@ -1,4 +1,4 @@
-using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Models.Errors;
 
 namespace AlfaMicroserviceMesh.Exceptions;
 
@@ -8,12 +8,12 @@ public class MicroserviceException : Exception {
 
     public ErrorData Info = new();
 
-    public MicroserviceException(List<string> messages, int status = 500, string type = "INTERNAL_ERROR") {
+    public MicroserviceException(object message, ErrorResponseType errorType) {
         Info = new ErrorData {
-            Status = status,
-            Type = type,
+            Status = errorType.Status,
+            Type = errorType.Type,
             ErrorSource = $"{ServiceName}.{ServiceInstance}",
-            Errors = messages,
+            Error = message,
         };
     }
     public MicroserviceException() { }

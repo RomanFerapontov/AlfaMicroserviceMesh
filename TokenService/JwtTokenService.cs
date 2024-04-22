@@ -1,21 +1,22 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using AlfaMicroserviceMesh.Constants;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
-namespace AlfaMicroserviceMesh.Services;
+namespace AlfaMicroserviceMesh.TokenService;
 
-public class TokenService : ITokenService {
+public class JwtTokenService : IJwtTokenService {
     private readonly IConfiguration _config;
     private readonly string signingKey;
     private readonly string issuer;
     private readonly string audience;
 
-    public TokenService(IConfiguration config) {
+    public JwtTokenService(IConfiguration config) {
         _config = config;
         signingKey = _config["JWT:SigningKey"]!;
         issuer = _config["JWT:Issuer"] ?? "";
@@ -24,13 +25,12 @@ public class TokenService : ITokenService {
 
     public string CreateToken(ClaimData claimData) {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
 
         List<Claim> claims = [
             new Claim("uid", claimData.Uid),
             new Claim("role", claimData.Role),
         ];
-
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
 
         var tokenDescription = new SecurityTokenDescriptor {
             Subject = new ClaimsIdentity(claims),
@@ -41,22 +41,20 @@ public class TokenService : ITokenService {
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
-
         var token = tokenHandler.CreateToken(tokenDescription);
 
         return tokenHandler.WriteToken(token);
     }
 
     public async Task<Dictionary<string, string>> GetAccessData(string token) {
+        Dictionary<string, string> accessData = [];
+        
         var tokenHandler = new JwtSecurityTokenHandler();
 
         if (!IsValidToken(token))
-            throw new MicroserviceException(["Invalid token"], 403, "AUTHORIZATION_ERROR");
+            throw new MicroserviceException("Invalid token", ErrorTypes.Unauthorized);
 
         var tokenData = tokenHandler.ReadToken(token).ToString()!.Split(".")[1];
-
-        Dictionary<string, string> accessData = [];
-
         var tokenVariables = await tokenData.DeserializeAsync<Dictionary<string, object>>()!;
 
         foreach (var row in tokenVariables)
@@ -80,6 +78,7 @@ public class TokenService : ITokenService {
             };
 
             tokenHandler.ValidateToken(token, validationParameters, out SecurityToken _);
+            
             return true;
         }
         catch {

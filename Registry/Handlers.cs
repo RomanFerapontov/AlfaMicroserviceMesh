@@ -1,16 +1,15 @@
 using System.Reflection;
-using AlfaMicroserviceMesh.Models;
-using AlfaMicroserviceMesh.Models.Action;
-using AlfaMicroserviceMesh.Models.Node;
 using AlfaMicroserviceMesh.Models.ReqRes;
+using AlfaMicroserviceMesh.Models.Service;
+using AlfaMicroserviceMesh.Models.Service.Handler;
 
-namespace AlfaMicroserviceMesh.Services;
+namespace AlfaMicroserviceMesh.Registry;
 
 public class Handlers {
     public static readonly Dictionary<string, Func<Context, Task<Response>>> Call = [];
     public static readonly Dictionary<string, Func<Context, Task>> Emit = [];
     public static readonly Dictionary<string, int> Timeouts = [];
-    private static readonly InstanceMetadata instancesMetadata = new();
+    private static readonly ServiceData instancesMetadata = new();
 
     public static void Add(List<object> handlersList) {
         foreach (var handlers in handlersList) {
@@ -23,21 +22,21 @@ public class Handlers {
 
                     Dictionary<string, object> args = [];
 
-                    if (action.Route != null) args.Add("Route", action.Route);
-                    if (action.Params != null) args.Add("Params", action.Params);
-                    if (action.Access != null) args.Add("Access", action.Access);
-                    if (action.RequestTimeout != null) {
+                    if (action.Route is not null) args.Add("Route", action.Route);
+                    if (action.Params is not null) args.Add("Params", action.Params);
+                    if (action.Access is not null) args.Add("Access", action.Access);
+                    if (action.RequestTimeout is not null) {
                         Timeouts[field.Name] = (int)action.RequestTimeout;
                         args.Add("RequestTimeout", action.RequestTimeout);
                     }
-                    if (action.RetryPolicy != null) args.Add("RetryPolicy", action.RetryPolicy);
-                    if (action.Caching != null) args.Add("Caching", action.Caching);
+                    if (action.RetryPolicy is not null) args.Add("RetryPolicy", action.RetryPolicy);
+                    if (action.Caching is not null) args.Add("Caching", action.Caching);
 
                     instancesMetadata.Actions[field.Name] = args;
 
                     var handler = action?.Handler;
 
-                    if (handler != null) Call[field.Name] = handler;
+                    if (handler is not null) Call[field.Name] = handler;
                 }
 
                 if (field.FieldType == typeof(NewEvent)) {
@@ -46,10 +45,10 @@ public class Handlers {
                     var newEvent = (NewEvent)field.GetValue(handlers)!;
                     var listener = newEvent?.Handler;
 
-                    if (listener != null) Emit[field.Name] = listener;
+                    if (listener is not null) Emit[field.Name] = listener;
                 }
             }
         };
-        Nodes.selfContext.Metadata = instancesMetadata;
+        Services.selfContext.Metadata = instancesMetadata;
     }
 }

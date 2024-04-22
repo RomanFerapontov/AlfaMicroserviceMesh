@@ -1,8 +1,8 @@
-using AlfaMicroserviceMesh.Models;
+using AlfaMicroserviceMesh.Models.Service;
 using System.Text;
 using RabbitMQ.Client;
 using Serilog;
-using AlfaMicroserviceMesh.Services;
+using AlfaMicroserviceMesh.Registry;
 
 namespace AlfaMicroserviceMesh.Communication;
 
@@ -10,7 +10,7 @@ public static class RabbitMQService {
     public static readonly string ExchangeName = "common-communications";
     private static IConnection? _connection;
     public static IModel? channel;
-    private static readonly Context _context = Nodes.selfContext;
+    private static readonly Context _context = Services.selfContext;
 
     public static void Connect() {
         try {

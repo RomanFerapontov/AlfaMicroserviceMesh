@@ -1,35 +1,35 @@
 using AlfaMicroserviceMesh.Communication;
+using AlfaMicroserviceMesh.Constants;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
 using AlfaMicroserviceMesh.Helpers;
-using AlfaMicroserviceMesh.Models;
-using AlfaMicroserviceMesh.Models.Action;
-using AlfaMicroserviceMesh.Models.Node;
 using AlfaMicroserviceMesh.Models.ReqRes;
+using AlfaMicroserviceMesh.Models.Service;
+using AlfaMicroserviceMesh.Models.Service.Handler;
 using AlfaMicroserviceMesh.Validator;
 using Serilog;
 
-namespace AlfaMicroserviceMesh.Services;
+namespace AlfaMicroserviceMesh.Registry;
 
-public static class Nodes {
-    public readonly static Dictionary<string, Node> _nodes = [];
+public static class Services {
+    public readonly static Dictionary<string, Service> _services = [];
     private readonly static Dictionary<string, string> _timers = [];
 
     public static readonly Context selfContext = new() {
-        NodeName = ServiceBroker.Service.Name,
+        ServiceName = ServiceBroker.Service.Name,
         InstanceID = ServiceBroker.Service.InstanceID
     };
 
     public static void AddNode(Context ctx) {
-        string node = ctx.NodeName;
+        string node = ctx.ServiceName;
         string InstanceID = ctx.InstanceID;
 
-        if (!_nodes.ContainsKey(node)) {
+        if (!_services.ContainsKey(node)) {
             RegisterNode(ctx);
             Log.Information($"Node '{node}' added");
         }
 
-        if (!_nodes[node].Instances.ContainsKey(InstanceID)) {
+        if (!_services[node].Instances.ContainsKey(InstanceID)) {
             RegisterNodeInstance(ctx);
             Log.Information($"instance '{InstanceID}' added");
         }
@@ -39,10 +39,10 @@ public static class Nodes {
         SetInstanceLiveTimeInterval(ctx, 15000);
     }
 
-    private static void RegisterNode(Context ctx) => _nodes[ctx.NodeName] = new Node();
+    private static void RegisterNode(Context ctx) => _services[ctx.ServiceName] = new Service();
 
     public static void DeleteNode(Context ctx) {
-        if (_nodes.TryGetValue(ctx.NodeName, out Node? value)) {
+        if (_services.TryGetValue(ctx.ServiceName, out Service? value)) {
             if (value.Instances.ContainsKey(ctx.InstanceID)) {
                 RemoveNodeInstance(ctx);
             }
@@ -50,7 +50,7 @@ public static class Nodes {
     }
 
     private static void RegisterNodeInstance(Context ctx) {
-        _nodes[ctx.NodeName].Instances[ctx.InstanceID] = new InstanceMetadata {
+        _services[ctx.ServiceName].Instances[ctx.InstanceID] = new ServiceData {
             Actions = ctx.Metadata.Actions,
             Events = ctx.Metadata.Events
         };
@@ -59,23 +59,28 @@ public static class Nodes {
     private static void RemoveNodeInstance(Context ctx) {
         RemoveNodeInstanceTimer(ctx.InstanceID);
 
-        _nodes[ctx.NodeName].Instances.Remove(ctx.InstanceID);
+        _services[ctx.ServiceName].Instances.Remove(ctx.InstanceID);
 
-        if (_nodes[ctx.NodeName].Instances.Count == 0) _nodes.Remove(ctx.NodeName);
+        if (_services[ctx.ServiceName].Instances.Count is 0) {
+            _services.Remove(ctx.ServiceName);
+        }
+
         Log.Warning($"Node '{ctx.InstanceID}' deleted");
     }
 
     private static void SetInstanceLiveTimeInterval(Context ctx, int liveInterval) {
         var timerID = Timers.SetTimeout(() => RemoveNodeInstance(ctx), liveInterval);
+
         _timers[ctx.InstanceID] = timerID;
     }
 
     private static void RemoveNodeInstanceTimer(string InstanceID) =>
         Timers.ClearTimer(_timers[InstanceID]);
 
-    public static string GetNodeInstanceUid(string nodeName) {
-        if (!_nodes.TryGetValue(nodeName, out Node? node))
-            throw new MicroserviceException([$"Service '{nodeName}' is not available"]);
+    public static string GetNodeInstanceUid(string ServiceName) {
+        if (!_services.TryGetValue(ServiceName, out Service? node)) {
+            throw new MicroserviceException($"Service '{ServiceName}' not found", ErrorTypes.ServiceNotFound);
+        }
 
         string lastRequestedInstanceUid = node.LastRequest;
 
@@ -93,20 +98,21 @@ public static class Nodes {
     }
 
     public static bool IsActionExists(string node, string instanceId, string action) =>
-        _nodes[node].Instances[instanceId].Actions.ContainsKey(action);
+        _services[node].Instances[instanceId].Actions.ContainsKey(action);
 
     public static async Task<NewAction> GetActionData(string node, string instanceId, string action) {
-        if (!IsActionExists(node, instanceId, action))
-            throw new MicroserviceException([$"Invalid action name: '{action}'"]);
+        if (!IsActionExists(node, instanceId, action)) {
+            throw new MicroserviceException($"Action '{action}' not found", ErrorTypes.ActionNotFound);
+        }
 
-        var actionData = await _nodes[node].Instances[instanceId].Actions[action].SerializeAsync();
+        var actionData = await _services[node].Instances[instanceId].Actions[action].SerializeAsync();
 
         return await actionData.DeserializeAsync<NewAction>();
     }
 
     public static async Task<Response?> Call(string node, string action, object parameters = null!, string instanceId = null!) {
         instanceId ??= GetNodeInstanceUid(node);
-        
+
         var actionData = await GetActionData(node, instanceId, action);
         var exception = new MicroserviceException();
         var retries = actionData.RetryPolicy?.MaxAttempts ??
@@ -116,13 +122,13 @@ public static class Nodes {
             var requestTimeout = actionData?.RequestTimeout ?? ServiceBroker.Service.RequestTimeout;
             var requestID = Guid.NewGuid().ToString();
 
-            if (parameters != null && actionData!.Params != null) {
+            if (parameters != null && actionData!.Params is not null) {
                 var paramsSchema = await actionData.Params.ConvertToModel<Dictionary<string, ActionParams>>();
                 parameters = await CustomValidator.ValidateParams(parameters, paramsSchema!);
             }
 
             Context context = new() {
-                NodeName = selfContext.NodeName,
+                ServiceName = selfContext.ServiceName,
                 InstanceID = selfContext.InstanceID,
                 Action = action,
                 Event = "request",
@@ -135,26 +141,26 @@ public static class Nodes {
             var message = await context.SerializeAsync();
 
             RabbitMQService.PublishMessage(message, instanceId);
-            
+
             Response result = await Responses
                 .GetResponse(requestID, TimeSpan.FromMilliseconds(requestTimeout));
 
-            if (result?.Error != null) {
-                exception.Info.Errors = result.Error.Errors;
+            if (result?.Error is not null) {
+                
+                exception.Info = result.Error;
                 retries--;
                 await Task.Delay(actionData?.RetryPolicy?.Delay ??
                     ServiceBroker.Service.RetryPolicy.Delay);
             }
             else return result;
         }
-
         throw exception;
     }
 
     public static async Task Broadcast(string action, object? parameters = null!) {
-        foreach (var node in _nodes) {
+        foreach (var node in _services) {
             Context context = new() {
-                NodeName = selfContext.NodeName,
+                ServiceName = selfContext.ServiceName,
                 InstanceID = selfContext.InstanceID,
                 Action = action,
                 Event = "event",
@@ -166,7 +172,7 @@ public static class Nodes {
 
             var instanceId = GetNodeInstanceUid(node.Key);
 
-            if (_nodes[node.Key].Instances[instanceId].Events.Contains(action)) {
+            if (_services[node.Key].Instances[instanceId].Events.Contains(action)) {
                 var message = await context.SerializeAsync();
                 RabbitMQService.PublishMessage(message, instanceId);
             }

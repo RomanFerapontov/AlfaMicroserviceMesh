@@ -1,6 +1,6 @@
 ﻿using AlfaMicroserviceMesh.Communication;
 using AlfaMicroserviceMesh.Models.Service;
-using AlfaMicroserviceMesh.Services;
+using AlfaMicroserviceMesh.TokenService ;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using OpenTelemetry.Metrics;
@@ -12,7 +12,7 @@ public static class ServiceBroker {
     public static readonly ServiceOptions Service = new();
 
     public static void CreateService(this WebApplicationBuilder builder, ServiceOptions configuration) {
-        builder.Services.AddScoped<ITokenService, TokenService>();
+        builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<MessageProcessor>();
         builder.Services.AddSingleton<HealthChecker>();

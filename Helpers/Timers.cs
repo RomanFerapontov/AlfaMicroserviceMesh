@@ -1,5 +1,5 @@
-using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Models.ReqRes;
+using AlfaMicroserviceMesh.Models.Service;
 
 namespace AlfaMicroserviceMesh.Helpers;
 

@@ -1,22 +1,22 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AlfaMicroserviceMesh.Constants;
 using AlfaMicroserviceMesh.Exceptions;
 using AlfaMicroserviceMesh.Extentions;
-using AlfaMicroserviceMesh.Models.Action;
+using AlfaMicroserviceMesh.Models.Errors;
+using AlfaMicroserviceMesh.Models.Service.Handler;
 
 namespace AlfaMicroserviceMesh.Validator;
 
 public static class CustomValidator {
-    private static List<string> Errors { get; set; } = [];
+    private static List<object> Errors { get; set; } = [];
 
     public static async Task<object> ValidateParams(object requestParams, Dictionary<string, ActionParams> actionParams) {
-        string paramsString = await requestParams.SerializeAsync();
-
+        var paramsString = await requestParams.SerializeAsync();
         var paramsDict = await paramsString.DeserializeAsync<Dictionary<string, object>>();
+        var parameters = JsonDocument.Parse(paramsString);
 
         CheckRequiredParams([.. paramsDict.Keys], GetRequiredParamsList(actionParams));
-
-        var parameters = JsonDocument.Parse(paramsString);
 
         foreach (var param in parameters.RootElement.EnumerateObject()) {
             string requestParam = param.Value.ToString();
@@ -24,27 +24,42 @@ public static class CustomValidator {
 
             if (actionParams.TryGetValue(param.Name, out ActionParams? actionParam)) {
                 var actionParamType = actionParam.Type;
-
                 var allowedValues = actionParam.Allowed;
 
-                if (allowedValues != null) {
+                if (allowedValues is not null) {
                     actionParamType = "String";
                     if (!allowedValues.Contains(requestParam)) {
-                        Errors.Add($"Value must be equal: {string.Join("/", allowedValues)}. (Parameter '{param.Name}')");
+                        Errors.Add(new ErrorValidationData {
+                            Field = param.Name,
+                            Value = requestParam,
+                            Message = ErrorMessages.NotAllowed + string.Join(", ", allowedValues),
+                        });
                     }
                 }
-                if (actionParamType == "Email") {
-                    if (IsEmail(requestParam) == false) {
-                        Errors.Add($"Value must be in the correct format (e.g., name@example.com). (Parameter '{param.Name}')");
+                if (actionParamType is "Email") {
+                    if (IsEmail(requestParam) is false) {
+                        Errors.Add(new ErrorValidationData {
+                            Field = param.Name,
+                            Value = requestParam,
+                            Message = ErrorMessages.EmailFormat
+                        });
                     }
                 }
-                else if (actionParamType == "Password") {
-                    if (IsPassword(requestParam) == false) {
-                        Errors.Add($"Value must be at least 8 characters long and contain uppercase, lowercase, and numeric characters. (Parameter '{param.Name}')");
+                else if (actionParamType is "Password") {
+                    if (IsPassword(requestParam) is false) {
+                        Errors.Add(new ErrorValidationData {
+                            Field = param.Name,
+                            Value = requestParam,
+                            Message = ErrorMessages.PasswordFormat
+                        });
                     }
                 }
                 else if (actionParamType != requestParamType) {
-                    Errors.Add($"Value must be type of {actionParamType}. (Parameter '{param.Name}')");
+                    Errors.Add(new ErrorValidationData {
+                        Field = param.Name,
+                        Value = int.TryParse(requestParam, out int value) ? value : requestParam,
+                        Message = ErrorMessages.Type + $"'{actionParamType}'",
+                    });
                 }
             }
         }
@@ -52,7 +67,7 @@ public static class CustomValidator {
         if (Errors.Count > 0) {
             var errorMessages = Errors;
             Errors = [];
-            throw new MicroserviceException(errorMessages, 400, "PARAMETER_VALIDATION_ERROR");
+            throw new MicroserviceException(errorMessages, ErrorTypes.ValidationError);
         }
 
         return requestParams;
@@ -63,16 +78,20 @@ public static class CustomValidator {
 
         if (unusedParams.Any()) {
             foreach (var unusedParam in unusedParams) {
-                Errors.Add($"Required parameters not used. (Parameter '{unusedParam}')");
+                Errors.Add(new ErrorValidationData {
+                    Field = unusedParam,
+                    Message = ErrorMessages.Required,
+                });
             }
         }
     }
 
-    private static List<string> GetRequiredParamsList(Dictionary<string, ActionParams> parameters) {
-        return parameters.Where(p => p.Value.Required).Select(p => p.Key).ToList();
-    }
+    private static List<string> GetRequiredParamsList(Dictionary<string, ActionParams> parameters)
+        => parameters.Where(p => p.Value.Required).Select(p => p.Key).ToList();
 
-    private static bool IsEmail(string email) => Regex.IsMatch(email, ValidationPatterns.Email);
+    private static bool IsEmail(string email)
+        => Regex.IsMatch(email, ValidationPatterns.Email);
 
-    private static bool IsPassword(string password) => Regex.IsMatch(password, ValidationPatterns.Password);
+    private static bool IsPassword(string password)
+        => Regex.IsMatch(password, ValidationPatterns.Password);
 }

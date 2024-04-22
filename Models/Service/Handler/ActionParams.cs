@@ -1,4 +1,4 @@
-namespace AlfaMicroserviceMesh.Models.Action;
+namespace AlfaMicroserviceMesh.Models.Service.Handler;
 
 public class ActionParams {
     public string Type { get; set; } = string.Empty;
