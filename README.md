@@ -134,6 +134,7 @@ In `Program.cs` create new service with options using **ServiceBroker**
 
 ```csharp
 using AlfaMicroserviceMesh;
+using AlfaMicroserviceMesh.Models;
 using AlfaMicroserviceMesh.Models.Service;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -142,12 +143,14 @@ var config = builder.Configuration;
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 
-var options = new ServiceOptions {
+var options = new ServiceOptions
+{
     Name = config["ServiceName"]!,
     Version = config["Version"]!,
-    Transport = new MessageBroker {
-        Host = config["Connections:RabbitMQ:Host"],
-        Port = config["Connections:RabbitMQ:Port"],
+    Transport = new ServerAddress
+    {
+        Host = config["Connections:RabbitMQ:Host"]!,
+        Port = config["Connections:RabbitMQ:Port"]!,
     },
     Metrics = true,
     Logging = true,
