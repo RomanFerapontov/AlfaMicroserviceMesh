@@ -11,7 +11,7 @@ using AlfaMicroserviceMesh.Registry;
 using AlfaMicroserviceMesh.Models.Errors;
 using AlfaMicroserviceMesh.Constants;
 
-namespace AlfaMicroserviceMesh.Utils;
+namespace AlfaMicroserviceMesh.Controllers;
 
 [ApiController]
 public class HandlersController(

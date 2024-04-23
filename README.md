@@ -93,7 +93,7 @@ Enter variables to `appsettings.js`
   "JWT": {
     "Issuer": "http://your_server:port",
     "Audience": "http://your_api:port",
-    "SigningKey": "Your Signing Key"
+    "SigningKey": "Your Signing Key" //the key size must be greater than 256 bits
   },
   "Serilog": {
     "Using": [

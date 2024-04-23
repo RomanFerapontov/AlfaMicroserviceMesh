@@ -14,12 +14,12 @@ public static class RabbitMQService {
 
     public static void Connect() {
         try {
-        ConnectionFactory factory = new() {
-            HostName = ServiceBroker.Service.Transport.Host,
-            Port = int.Parse(ServiceBroker.Service.Transport.Port!),
-        };
+            ConnectionFactory factory = new() {
+                HostName = ServiceBroker.Service.Transport.Host,
+                Port = int.Parse(ServiceBroker.Service.Transport.Port!),
+            };
 
-        string instanceId = _context.InstanceID;
+            string instanceId = _context.InstanceID;
 
             _connection = factory.CreateConnection();
             _connection.ConnectionShutdown += RabbitMQ_ConnectionShutdown;
@@ -35,7 +35,7 @@ public static class RabbitMQService {
             Log.Information($"Queue {instanceId} is created");
         }
         catch (Exception ex) {
-            Log.Information($"Could not connect to Message Bus: {ex.Message}");
+            Log.Error($"Could not connect to Message Bus: {ex.Message}");
         }
     }
 
@@ -49,7 +49,7 @@ public static class RabbitMQService {
     }
 
     private static void RabbitMQ_ConnectionShutdown(object? sender, ShutdownEventArgs e) =>
-         Log.Information($"RabbitMQ Connection Shutdown");
+         Log.Warning($"RabbitMQ Connection Shutdown");
 
     private static void Dispose() {
         if (channel!.IsOpen) {

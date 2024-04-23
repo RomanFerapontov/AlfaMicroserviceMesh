@@ -1,7 +1,7 @@
 using AlfaMicroserviceMesh.Registry;
 using Microsoft.AspNetCore.Mvc;
 
-namespace AlfaMicroserviceMesh.Controller;
+namespace AlfaMicroserviceMesh.Controllers;
 
 [ApiController]
 public class RegistryController : ControllerBase {
